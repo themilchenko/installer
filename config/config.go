@@ -1,15 +1,14 @@
-package main
+package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"os/exec"
 
 	"gopkg.in/yaml.v3"
-
-	"agent/installer/downloader"
 )
 
 const (
@@ -18,16 +17,13 @@ const (
    name: %s
    display_name: %s
    description: %s
-   host: %s
    port: %s
 
  observer:
    name: %s
    display_name: %s
    description: %s
-   host: %s
    port: %s`
-
 	defaultCfgName = "config.yaml"
 
 	hostAddrFlg   = "-HostAddress="
@@ -43,7 +39,6 @@ type InstallerConfig struct {
 			Name        string `yaml:"name"`
 			DisplayName string `yaml:"display_name"`
 			Description string `yaml:"description"`
-			Host        string `yaml:"host"`
 			Port        string `yaml:"port"`
 		} `yaml:"agent"`
 
@@ -51,7 +46,6 @@ type InstallerConfig struct {
 			Name        string `yaml:"name"`
 			DisplayName string `yaml:"display_name"`
 			Description string `yaml:"description"`
-			Host        string `yaml:"host"`
 			Port        string `yaml:"port"`
 		} `yaml:"observer"`
 	} `yaml:"services"`
@@ -64,6 +58,88 @@ type InstallerConfig struct {
 	Files      []string `yaml:"files"`
 	ServerAddr string   `yaml:"address"`
 	ServerPort string   `yaml:"port"`
+}
+
+func (c *InstallerConfig) GenerateConfig() error {
+	// Init agent service
+	fmt.Println("========== Agent ==========")
+	fmt.Print("Enter the Name of agent service: ")
+	fmt.Scanf("%s", &c.Services.Agent.Name)
+	fmt.Print("Enter the Display Name of agent service: ")
+	fmt.Scanf("%s", &c.Services.Agent.DisplayName)
+	fmt.Print("Enter the Description of agent service: ")
+	fmt.Scanf("%s", &c.Services.Agent.Description)
+	fmt.Print("Enter the Port of agent service: ")
+	fmt.Scanf("%s", &c.Services.Agent.Port)
+
+	fmt.Println()
+
+	// Init observer service
+	fmt.Println("========== Observer ==========")
+	fmt.Print("Enter the Name of observer service: ")
+	fmt.Scanf("%s", &c.Services.Observer.Name)
+	fmt.Print("Enter the Display Name of observer service: ")
+	fmt.Scanf("%s", &c.Services.Observer.DisplayName)
+	fmt.Print("Enter the Description of observer service: ")
+	fmt.Scanf("%s", &c.Services.Observer.Description)
+	fmt.Print("Enter the Port of observer service: ")
+	fmt.Scanf("%s", &c.Services.Observer.Port)
+
+	fmt.Println()
+
+	// Init pathes for installing services
+	fmt.Println("========== Installation pathes ==========")
+	fmt.Print("Enter the path to installing services configs: ")
+	fmt.Scanf("%s", &c.Installer.PathToCfg)
+	fmt.Print("Enter the path to installing services binaries: ")
+	fmt.Scanf("%s", &c.Installer.PathToBin)
+
+	fmt.Println()
+
+	// Init name of files
+	fmt.Println("========== Names to install ==========")
+	fmt.Print("Enter the num of files you want to install from remote server: ")
+	var filesNum int
+	fmt.Scanf("%d", &filesNum)
+	fmt.Println("Name files you want to install")
+	for i := 0; i < filesNum; i++ {
+		var curName string
+		fmt.Printf("%d) ", i+1)
+		fmt.Scanf("%s", &curName)
+		c.Files = append(c.Files, curName)
+	}
+
+	fmt.Println()
+
+	// Init the addr of server to install content from
+	fmt.Println("========== Remote address ==========")
+	fmt.Print("Enter the ip of remote server: ")
+	fmt.Scanf("%s", &c.ServerAddr)
+	fmt.Print("Enter the port of remote server: ")
+	fmt.Scanf("%s", &c.ServerPort)
+
+	// Marshal existing content
+	src, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	// Create config
+	dst, err := os.Create("config.yaml")
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	// Writing content in it
+	buf := bytes.NewBuffer(src)
+
+	_, err = io.Copy(dst, buf)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *InstallerConfig) Open(path string) error {
@@ -88,7 +164,7 @@ func getCorrectPath(path string) string {
 }
 
 // This function init configuration folder and create config file with default settings
-func (c *InstallerConfig) installation() error {
+func (c *InstallerConfig) Installation() error {
 	// Creating folder and config
 	if _, err := os.Stat(c.Installer.PathToCfg + "agent.base/"); err != nil {
 		if err := os.Mkdir(c.Installer.PathToCfg+"agent.base/", os.ModePerm); err != nil {
@@ -111,31 +187,17 @@ func (c *InstallerConfig) installation() error {
 		c.Services.Agent.Name,
 		c.Services.Agent.DisplayName,
 		c.Services.Agent.Description,
-		c.Services.Agent.Host,
 		c.Services.Agent.Port,
 
 		c.Services.Observer.Name,
 		c.Services.Observer.DisplayName,
 		c.Services.Observer.Description,
-		c.Services.Observer.Host,
 		c.Services.Observer.Port,
 	)
 	_, err = fmt.Fprint(file, content)
 	if err != nil {
 		return err
 	}
-
-	// Building binary files for agent and observer
-	// _, err = exec.Command("go", "build", "-o", c.Installer.PathToBin, "../agent/service_agent.go").
-	// 	Output()
-	// if err != nil {
-	// 	return err
-	// }
-	// _, err = exec.Command("go", "build", "-o", c.Installer.PathToBin, "../observer/service_observer.go").
-	// 	Output()
-	// if err != nil {
-	// 	return err
-	// }
 
 	// Creating config and installing daemons in system
 	_, err = agentWork(*c)
@@ -179,34 +241,4 @@ func agentWork(cfg InstallerConfig) (string, error) {
 		return "", err
 	}
 	return string(agentOutput), nil
-}
-
-func main() {
-	var pathToCfg string
-	if len(os.Args) == 1 {
-		pathToCfg = defaultCfgName
-	} else if len(os.Args) == 2 {
-		pathToCfg = os.Args[1]
-	} else {
-		log.Fatal("this program works with less than 2 arguments")
-	}
-
-	// Reading config
-	cfg := new(InstallerConfig)
-
-	err := cfg.Open(pathToCfg)
-	if err != nil {
-		log.Fatal("cannot open configuration file")
-	}
-
-	// Download files form server
-	downloader.DownloadAllFiles(cfg.Files, cfg.ServerAddr+":"+cfg.ServerPort)
-
-	// Start installation
-	err = cfg.installation()
-	if err != nil {
-		log.Fatalf("Fatal error: %s\n", err.Error())
-	}
-
-	fmt.Println("Installer has finished work successfully")
 }

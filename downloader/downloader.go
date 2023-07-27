@@ -2,11 +2,10 @@ package downloader
 
 import (
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/labstack/gommon/log"
 )
 
 const (
@@ -53,7 +52,7 @@ func DownloadAllFiles(fileNames []string, url string) {
 	for _, fileName := range fileNames {
 		err := downloadFile(fileName, url)
 		if err != nil {
-			log.Error(err)
+			log.Printf("Cannot load file with name %s", fileName)
 		}
 	}
 }
