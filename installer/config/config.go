@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -9,6 +10,9 @@ import (
 	"os/exec"
 
 	"gopkg.in/yaml.v3"
+
+	"installer/downloader"
+	"installer/utils"
 )
 
 const (
@@ -62,37 +66,52 @@ type InstallerConfig struct {
 
 func (c *InstallerConfig) GenerateConfig() error {
 	// Init agent service
+
+	scanner := bufio.NewScanner(os.Stdin)
+
 	fmt.Println("========== Agent ==========")
 	fmt.Print("Enter the Name of agent service: ")
-	fmt.Scanf("%s", &c.Services.Agent.Name)
+	if scanner.Scan() {
+		c.Services.Agent.Name = scanner.Text()
+	}
 	fmt.Print("Enter the Display Name of agent service: ")
-	fmt.Scanf("%s", &c.Services.Agent.DisplayName)
+	if scanner.Scan() {
+		c.Services.Agent.DisplayName = scanner.Text()
+	}
 	fmt.Print("Enter the Description of agent service: ")
-	fmt.Scanf("%s", &c.Services.Agent.Description)
+	if scanner.Scan() {
+		c.Services.Agent.Description = scanner.Text()
+	}
 	fmt.Print("Enter the Port of agent service: ")
-	fmt.Scanf("%s", &c.Services.Agent.Port)
+	fmt.Scanln(&c.Services.Agent.Port)
 
 	fmt.Println()
 
 	// Init observer service
 	fmt.Println("========== Observer ==========")
 	fmt.Print("Enter the Name of observer service: ")
-	fmt.Scanf("%s", &c.Services.Observer.Name)
+	if scanner.Scan() {
+		c.Services.Observer.Name = scanner.Text()
+	}
 	fmt.Print("Enter the Display Name of observer service: ")
-	fmt.Scanf("%s", &c.Services.Observer.DisplayName)
+	if scanner.Scan() {
+		c.Services.Observer.DisplayName = scanner.Text()
+	}
 	fmt.Print("Enter the Description of observer service: ")
-	fmt.Scanf("%s", &c.Services.Observer.Description)
+	if scanner.Scan() {
+		c.Services.Observer.Description = scanner.Text()
+	}
 	fmt.Print("Enter the Port of observer service: ")
-	fmt.Scanf("%s", &c.Services.Observer.Port)
+	fmt.Scanln(&c.Services.Observer.Port)
 
 	fmt.Println()
 
 	// Init pathes for installing services
 	fmt.Println("========== Installation pathes ==========")
 	fmt.Print("Enter the path to installing services configs: ")
-	fmt.Scanf("%s", &c.Installer.PathToCfg)
+	fmt.Scanln(&c.Installer.PathToCfg)
 	fmt.Print("Enter the path to installing services binaries: ")
-	fmt.Scanf("%s", &c.Installer.PathToBin)
+	fmt.Scanln(&c.Installer.PathToBin)
 
 	fmt.Println()
 
@@ -100,12 +119,12 @@ func (c *InstallerConfig) GenerateConfig() error {
 	fmt.Println("========== Names to install ==========")
 	fmt.Print("Enter the num of files you want to install from remote server: ")
 	var filesNum int
-	fmt.Scanf("%d", &filesNum)
+	fmt.Scanln(&filesNum)
 	fmt.Println("Name files you want to install")
 	for i := 0; i < filesNum; i++ {
 		var curName string
 		fmt.Printf("%d) ", i+1)
-		fmt.Scanf("%s", &curName)
+		fmt.Scanln(&curName)
 		c.Files = append(c.Files, curName)
 	}
 
@@ -114,9 +133,9 @@ func (c *InstallerConfig) GenerateConfig() error {
 	// Init the addr of server to install content from
 	fmt.Println("========== Remote address ==========")
 	fmt.Print("Enter the ip of remote server: ")
-	fmt.Scanf("%s", &c.ServerAddr)
+	fmt.Scanln(&c.ServerAddr)
 	fmt.Print("Enter the port of remote server: ")
-	fmt.Scanf("%s", &c.ServerPort)
+	fmt.Scanln(&c.ServerPort)
 
 	// Marshal existing content
 	src, err := yaml.Marshal(c)
@@ -165,17 +184,17 @@ func getCorrectPath(path string) string {
 
 // This function init configuration folder and create config file with default settings
 func (c *InstallerConfig) Installation() error {
+	c.Installer.PathToCfg = getCorrectPath(c.Installer.PathToCfg)
+	c.Installer.PathToBin = getCorrectPath(c.Installer.PathToBin)
+
 	// Creating folder and config
-	if _, err := os.Stat(c.Installer.PathToCfg + "agent.base/"); err != nil {
-		if err := os.Mkdir(c.Installer.PathToCfg+"agent.base/", os.ModePerm); err != nil {
+	if _, err := os.Stat(c.Installer.PathToCfg + "aktiv.base/"); err != nil {
+		if err := os.Mkdir(c.Installer.PathToCfg+"aktiv.base/", os.ModePerm); err != nil {
 			return err
 		}
 	}
 
-	c.Installer.PathToCfg = getCorrectPath(c.Installer.PathToCfg)
-	c.Installer.PathToBin = getCorrectPath(c.Installer.PathToBin)
-
-	file, err := os.Create(c.Installer.PathToCfg + "agent.base/config.yaml")
+	file, err := os.Create(c.Installer.PathToCfg + "aktiv.base/config.yaml")
 	if err != nil {
 		return err
 	}
@@ -199,6 +218,17 @@ func (c *InstallerConfig) Installation() error {
 		return err
 	}
 
+	// Copy binaries into global dir
+	for _, file := range c.Files {
+		if err = utils.CopyFile(downloader.DefaultDownloadPath+file, c.Installer.PathToBin+file); err != nil {
+			return err
+		}
+		_, err := exec.Command("/usr/bin/chmod", "744", c.Installer.PathToBin+file).Output()
+		if err != nil {
+			return err
+		}
+	}
+
 	// Creating config and installing daemons in system
 	_, err = agentWork(*c)
 	if err != nil {
@@ -215,7 +245,7 @@ func (c *InstallerConfig) Installation() error {
 
 func observerWork(cfg InstallerConfig) (string, error) {
 	observerOutput, err := exec.Command(
-		cfg.Installer.PathToBin+"service_observer",
+		"observer",
 		srvDscFlg+cfg.Services.Observer.Description,
 		srvNameFlg+cfg.Services.Observer.Name,
 		srvDspNameFlg+cfg.Services.Observer.DisplayName,
@@ -230,7 +260,7 @@ func observerWork(cfg InstallerConfig) (string, error) {
 
 func agentWork(cfg InstallerConfig) (string, error) {
 	agentOutput, err := exec.Command(
-		cfg.Installer.PathToBin+"service_observer",
+		"agent",
 		srvDscFlg+cfg.Services.Agent.Description,
 		srvNameFlg+cfg.Services.Agent.Name,
 		srvDspNameFlg+cfg.Services.Agent.DisplayName,

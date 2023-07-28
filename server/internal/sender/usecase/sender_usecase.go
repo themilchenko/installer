@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	defaultSourceFolder = "/home/milchenko/programming/aktiv/test_data/"
+	defaultSourceFolder = "/home/milchenko/programming/aktiv/base.agent/bin/"
 )
 
 type SenderUsecase struct{}

@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
@@ -9,24 +10,32 @@ import (
 )
 
 const (
-	defaultDownloadPath = "/home/milchenko/programming/aktiv/base.agent/installer/dump/"
+	DefaultDownloadPath = "/home/milchenko/programming/aktiv/installer/installer/tmp/"
 )
 
 func downloadFile(fileName, URL string) error {
-	out, err := os.Create(defaultDownloadPath + fileName)
+	out, err := os.Create(DefaultDownloadPath + fileName)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
+	// Setting up https client
+	tlsConfig := tls.Config{
+		InsecureSkipVerify: false,
+	}
+	tr := &http.Transport{
+		TLSClientConfig: &tlsConfig,
+	}
+	client := http.Client{Transport: tr}
+
 	data := url.Values{}
 	data.Set("fileName", fileName)
 
-	u, _ := url.ParseRequestURI("http://" + URL)
+	u, _ := url.ParseRequestURI("https://" + URL)
 	u.Path = "/api/download"
 	urlStr := u.String()
 
-	client := &http.Client{}
 	r, _ := http.NewRequest(
 		http.MethodGet,
 		urlStr,

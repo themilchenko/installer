@@ -9,6 +9,11 @@ import (
 	"server/pkg/logger"
 )
 
+const (
+	pathToCert = "/usr/local/etc/certs/aktiv/localhost.pem"
+	pathToKey  = "/usr/local/etc/certs/aktiv/localhost-key.pem"
+)
+
 type Server struct {
 	Echo *echo.Echo
 
@@ -27,7 +32,7 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return err
 	}
-	return s.Echo.Start("localhost:8080")
+	return s.Echo.StartTLS("localhost:8080", pathToCert, pathToKey)
 }
 
 func (s *Server) init() error {
@@ -54,6 +59,6 @@ func (s *Server) makeRouter() {
 
 func (s *Server) makeEchoLogger() {
 	s.Echo.Logger = logger.GetInstance()
-	s.Echo.Logger.SetLevel(logger.ToLevel("info"))
+	s.Echo.Logger.SetLevel(logger.ToLevel("debug"))
 	s.Echo.Logger.Info("server started")
 }

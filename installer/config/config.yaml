@@ -1,0 +1,19 @@
+services:
+    agent:
+        name: Agent
+        display_name: Agent Aktiv
+        description: Service for detecting smart-cards
+        port: "9090"
+    observer:
+        name: Observer
+        display_name: Observer Aktiv
+        description: Service for observing agent service
+        port: "9091"
+installer:
+    path_to_config: /usr/local/etc
+    path_to_bin: /usr/local/bin
+files:
+    - agent
+    - observer
+address: localhost
+port: "8080"
